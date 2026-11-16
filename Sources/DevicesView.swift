@@ -161,6 +161,13 @@ struct DeviceView: View {
                 Section {
                     Button("Remove device", role: .destructive) { confirmRemove = true }
                         .accessibilityIdentifier("device.remove")
+                        // On the button, so from iOS 26 it shows by the button, not at the top of the screen.
+                        .confirmationDialog("Remove \(current.name)?", isPresented: $confirmRemove, titleVisibility: .visible) {
+                            Button("Remove", role: .destructive) {
+                                // A removal that couldn't be saved stays here, and the screen says so.
+                                if model.removeWireGuardDevice(peer.id) { dismiss() }
+                            }
+                        }
                 } footer: {
                     Text("After that it can't connect. Delete its tunnel in its WireGuard app too.")
                 }
@@ -195,12 +202,6 @@ struct DeviceView: View {
             Button("Cancel", role: .cancel) {}
         }
         .modifier(SelectsAllOnEdit(pending: $selectsName))
-        .confirmationDialog("Remove \(current.name)?", isPresented: $confirmRemove, titleVisibility: .visible) {
-            Button("Remove", role: .destructive) {
-                // A removal that couldn't be saved stays here, and the screen says so.
-                if model.removeWireGuardDevice(peer.id) { dismiss() }
-            }
-        }
     }
 }
 

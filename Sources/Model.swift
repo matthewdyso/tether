@@ -149,9 +149,11 @@ final class Model: ObservableObject {
         let secrets: SecretStore = demo?.secrets() ?? KeychainSecrets()
         settingsDefaults = demo?.settingsDefaults() ?? .standard
         noticeCenter = demo?.noticeCenter() ?? SystemNoticeCenter(log: Self.append)
+        hostName = HostName(store: demo != nil ? InMemorySecrets() : KeychainSecrets(service: HostName.service), log: Self.append)
         #else
         let secrets: SecretStore = KeychainSecrets()
         settingsDefaults = .standard
+        hostName = HostName(store: KeychainSecrets(service: HostName.service), log: Self.append)
         noticeCenter = SystemNoticeCenter(log: Self.append)
         #endif
         notifier = Notifier(defaults: settingsDefaults)
@@ -188,7 +190,7 @@ final class Model: ObservableObject {
                 self?.session.watch()
                 Self.debugLog.takeSource() // the Go server's lines, also when Tether has nothing to say
                 self?.checkLocalNetworkWhenTheHotspotComesUp()
-                self?.hostName.publish(self?.session.sharing == true ? self?.session.boundHosts ?? [] : [])
+                self?.publishHostName()
                 self?.notify()
                 // The slack lets iOS wake the app for this together with other timers.
                 let interval = KeepAlivePolicy.watchInterval(sceneActive: self?.session.sceneActive ?? false)
@@ -243,8 +245,8 @@ final class Model: ObservableObject {
     }
 
     private var watcher: Task<Void, Never>?
-    /// The #65 spike: tether-xxxx.local on the hotspot while sharing, see `HostName`.
-    private let hostName = HostName(log: Model.append)
+    /// <name>.local on the hotspot while sharing, see `HostName`.
+    private let hostName: HostName
     private var sampler: Task<Void, Never>?
 
     /// After each watcher round: what to tell, see `Notifier`. In the background the round has just
@@ -323,6 +325,24 @@ final class Model: ObservableObject {
 
     func resetWireGuard() {
         session.resetWireGuard()
+    }
+
+    /// What devices on the hotspot can call this iPhone, without ".local". Nil until the keys are read.
+    var hotspotName: String? { hostName.name(for: session.serverPublicKey) }
+    /// The name was picked in Settings, not made from the keys.
+    var hotspotNamePicked: Bool { hostName.custom != nil }
+
+    /// Picks the hotspot name, or the one from the keys for an empty one. False when it isn't a name
+    /// or couldn't be saved.
+    func pickHotspotName(_ typed: String) -> Bool {
+        objectWillChange.send()
+        let picked = hostName.pick(typed)
+        publishHostName()
+        return picked
+    }
+
+    private func publishHostName() {
+        hostName.publish(session.sharing ? session.boundHosts : [], publicKey: session.serverPublicKey)
     }
 
     func renameWireGuardDevice(_ id: WireGuardSetup.Peer.ID, to name: String) {

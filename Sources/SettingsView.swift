@@ -19,6 +19,9 @@ struct SettingsView: View {
     @AppStorage private var dnsControlD: String
     /// Read by `HotspotSession` for each config it makes, see `LocalNetworks`.
     @AppStorage private var localNetworksAllowed: Bool
+    /// The hotspot name as typed, empty for the one from the keys. Saved on Return, see `Model.pickHotspotName`.
+    @State private var typedHotspotName = ""
+    @State private var hotspotNameRefused = false
 
     init(model: Model) {
         self.model = model
@@ -34,6 +37,7 @@ struct SettingsView: View {
         NavigationStack {
             List {
                 sharing
+                hotspotName
                 newDevices
                 localNetworks
                 notices
@@ -116,6 +120,35 @@ struct SettingsView: View {
             Text("Idle means no device is connected. Stopping saves battery. Open Tether to share again. Data counts start again on this day each month. Set it to your plan's billing day so the limits match your carrier.")
                 .accessibilityIdentifier("sharing.footer")
         }
+    }
+
+    private var hotspotName: some View {
+        Section {
+            LabeledContent("Name") {
+                TextField("Name", text: $typedHotspotName, prompt: Text(model.hotspotName ?? "tether"))
+                    .multilineTextAlignment(.trailing)
+                    .keyboardType(.asciiCapable)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .submitLabel(.done)
+                    .onSubmit {
+                        hotspotNameRefused = !model.pickHotspotName(typedHotspotName)
+                        if !hotspotNameRefused { typedHotspotName = model.hotspotNamePicked ? model.hotspotName ?? "" : "" }
+                    }
+                    .accessibilityIdentifier("hotspot.name")
+            }
+            if hotspotNameRefused {
+                Text("Letters, digits and hyphens, up to 63, not starting or ending with a hyphen.")
+                    .font(.subheadline)
+                    .accessibilityIdentifier("hotspot.nameProblem")
+            }
+        } header: {
+            Text("Hotspot name")
+        } footer: {
+            Text("Devices on the hotspot reach this iPhone as \(model.hotspotName ?? "tether").local. Empty uses the name from Tether's keys. A device set up with the old name needs its Endpoint changed.")
+                .accessibilityIdentifier("hotspot.nameFooter")
+        }
+        .onAppear { typedHotspotName = model.hotspotNamePicked ? model.hotspotName ?? "" : "" }
     }
 
     private var newDevices: some View {

@@ -475,6 +475,8 @@ final class HotspotSession {
     }
 
     var wireGuardNeedsReset: Bool { devices.needsReset }
+    /// The server's public key, nil until the setup is read. `HostName` makes its name from it.
+    var serverPublicKey: Data? { devices.loaded ? devices.setup.serverPublicKey : nil }
 
     /// Gives up on saved keys this version can't read: a new server key and no devices.
     func resetWireGuard() {
