@@ -20,6 +20,8 @@ final class HotspotSessionTests: XCTestCase {
     private var idleAfter = IdleStop.After.never
     private var dns = DNSChoice.Upstream.servers(["1.1.1.1", "1.0.0.1"])
     private var blockLocal = true
+    private var vpn: String?
+    private var onlyThroughVPN = false
     private let usageDefaults: UserDefaults = {
         let defaults = UserDefaults(suiteName: "HotspotSessionTests.usage")!
         defaults.removePersistentDomain(forName: "HotspotSessionTests.usage")
@@ -42,7 +44,8 @@ final class HotspotSessionTests: XCTestCase {
                                  sceneActive: sceneActive, hotspotAddress: { [unowned self] in address },
                                  carrierIPv6Only: { [unowned self] in ipv6Only }, idleStopAfter: { [unowned self] in idleAfter },
                                  dns: { [unowned self] in dns }, blockLocal: { [unowned self] in blockLocal }, usageDefaults: usageDefaults,
-                                 now: { [unowned self] in now }, log: log)
+                                 now: { [unowned self] in now }, internetVPN: { [unowned self] in vpn },
+                                 onlyThroughVPN: { [unowned self] in onlyThroughVPN }, log: log)
     }
 
     private func minutes(_ m: Double) -> Date { start.addingTimeInterval(m * 60) }
@@ -1547,6 +1550,45 @@ final class HotspotSessionTests: XCTestCase {
         XCTAssertTrue(sound.playing)
     }
 
+    // MARK: Only share through a VPN
+
+    /// With the switch on, no device gets through while no VPN carries the internet, and all do again
+    /// as they were once one does. Nothing saved changes.
+    func testOnlyThroughAVPNLetsNoDeviceThroughWithoutOne() throws {
+        var saved = WireGuardSetup.new()
+        let ipad = try XCTUnwrap(saved.addPeer(name: "iPad"))
+        makeSession(saved: saved)
+        address = hotspot
+        session.syncWithHotspot()
+        XCTAssertEqual(server.lastSetup?.serverPeers.first { $0.id == ipad.id }?.paused, nil, "off: let through")
+
+        onlyThroughVPN = true
+        session.checkVPN()
+        XCTAssertTrue(session.blockedWithoutVPN)
+        XCTAssertNotNil(server.lastSetup?.serverPeers.first { $0.id == ipad.id }?.paused, "no VPN: kept out")
+        XCTAssertNil(devices.setup.peers.first { $0.id == ipad.id }?.paused, "the saved device isn't paused")
+        XCTAssertTrue(session.shortcutState().blockedWithoutVPN)
+
+        vpn = "utun5"
+        session.checkVPN()
+        XCTAssertFalse(session.blockedWithoutVPN)
+        XCTAssertEqual(session.vpnInterface, "utun5")
+        XCTAssertNil(server.lastSetup?.serverPeers.first { $0.id == ipad.id }?.paused, "a VPN: let through again")
+        XCTAssertTrue(session.shortcutState().vpn)
+    }
+
+    /// A start while there's no VPN starts with every device kept out, not let through for a round.
+    func testAStartWithoutAVPNKeepsTheDevicesOutFromTheStart() throws {
+        var saved = WireGuardSetup.new()
+        _ = try XCTUnwrap(saved.addPeer(name: "iPad"))
+        onlyThroughVPN = true
+        makeSession(saved: saved)
+        address = hotspot
+        session.syncWithHotspot()
+        XCTAssertTrue(server.running)
+        XCTAssertEqual(server.lastSetup?.serverPeers.allSatisfy { $0.paused != nil }, true)
+    }
+
     /// Stop Tether in Shortcuts stops at once, stays stopped with the hotspot on, and tells nothing.
     func testStopTetherStopsUntilStartTether() {
         shareInTheBackground()
@@ -1816,5 +1858,19 @@ final class HotspotSessionTests: XCTestCase {
         session.sampleTraffic()
         XCTAssertEqual(session.upSpeed, 0)
         XCTAssertEqual(session.downSpeed, 0)
+    }
+}
+
+final class InternetVPNTests: XCTestCase {
+    /// The internet's local address is on a tunnel: a VPN carries it. On cellular or Wi-Fi, or a tunnel
+    /// that only holds an address (Tailscale without an exit node), no.
+    func testAVPNIsTheInterfaceTheInternetsAddressIsOn() {
+        let lines = ["pdp_ip0: 10.180.2.3", "en0: 192.168.1.158", "utun5: 10.2.0.2", "utun3: fe80::1%utun3", "ipsec2: 10.9.0.4"]
+        XCTAssertEqual(Interfaces.vpn(in: lines, local: ["10.2.0.2"]), "utun5")
+        XCTAssertEqual(Interfaces.vpn(in: lines, local: ["10.9.0.4"]), "ipsec2")
+        XCTAssertNil(Interfaces.vpn(in: lines, local: ["10.180.2.3"]))
+        XCTAssertNil(Interfaces.vpn(in: lines, local: ["192.168.1.158"]))
+        XCTAssertNil(Interfaces.vpn(in: lines, local: []))
+        XCTAssertEqual(Interfaces.vpn(in: lines, local: ["10.180.2.3", "10.2.0.2"]), "utun5", "IPv6 through it is enough")
     }
 }

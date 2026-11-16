@@ -68,7 +68,7 @@ struct StopTetherIntent: AppIntent {
 struct GetTetherStatusIntent: AppIntent {
     static var title: LocalizedStringResource = "Get Tether Status"
     static var description = IntentDescription(
-        "Whether Tether is sharing, how many devices are connected, the hotspot name, and the problem if there is one.")
+        "Whether Tether is sharing, how many devices are connected, whether the internet goes out through a VPN, the hotspot name, and the problem if there is one.")
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<TetherStatusEntity> {
@@ -83,6 +83,7 @@ struct TetherStatusEntity: TransientAppEntity {
 
     @Property(title: "Sharing") var sharing: Bool
     @Property(title: "Connected Devices") var connectedDevices: Int
+    @Property(title: "Through a VPN") var vpn: Bool
     @Property(title: "Hotspot Name") var hotspotName: String
     @Property(title: "Problem") var problem: String
 
@@ -91,6 +92,7 @@ struct TetherStatusEntity: TransientAppEntity {
     init(_ state: ShortcutReply.State, name: String?) {
         sharing = state.sharing
         connectedDevices = state.connected
+        vpn = state.vpn
         hotspotName = name.map { "\($0).local" } ?? ""
         problem = state.problem ?? ""
     }
