@@ -22,6 +22,8 @@ final class HotspotSessionTests: XCTestCase {
     private var blockLocal = true
     private var vpn: String?
     private var onlyThroughVPN = false
+    /// What `HostName` answers on the hotspot, nil for the tests from before it.
+    private var localName: String?
     private let usageDefaults: UserDefaults = {
         let defaults = UserDefaults(suiteName: "HotspotSessionTests.usage")!
         defaults.removePersistentDomain(forName: "HotspotSessionTests.usage")
@@ -45,7 +47,8 @@ final class HotspotSessionTests: XCTestCase {
                                  carrierIPv6Only: { [unowned self] in ipv6Only }, idleStopAfter: { [unowned self] in idleAfter },
                                  dns: { [unowned self] in dns }, blockLocal: { [unowned self] in blockLocal }, usageDefaults: usageDefaults,
                                  now: { [unowned self] in now }, internetVPN: { [unowned self] in vpn },
-                                 onlyThroughVPN: { [unowned self] in onlyThroughVPN }, log: log)
+                                 onlyThroughVPN: { [unowned self] in onlyThroughVPN },
+                                 localName: { [unowned self] _ in localName }, log: log)
     }
 
     private func minutes(_ m: Double) -> Date { start.addingTimeInterval(m * 60) }
@@ -254,6 +257,60 @@ final class HotspotSessionTests: XCTestCase {
             XCTAssertEqual(session.needsNewConfig(overV4), round.v4, line: round.line)
             XCTAssertEqual(session.needsNewConfig(overV6), round.v6, line: round.line)
         }
+    }
+
+    /// With a name on the hotspot, a config on an IPv6-only carrier names it, with the address as a
+    /// comment, and keeps working through a new IPv6 address. It needs a new one only when the name
+    /// changes. One for 172.20.10.1 never does (#65).
+    func testAConfigThatNamesTheIPhoneFollowsItsAddress() throws {
+        localName = "tether-ab12.local"
+        makeSession()
+        let a = "2607:fb91:88a2:e822::a", b = "2607:fb91:88a3:1234::b"
+        address = a
+        session.syncWithHotspot()
+        session.openAddWindow()
+        let config = try XCTUnwrap(session.wireGuardReady.flatMap { session.wireGuardConfig(for: $0) })
+        XCTAssertTrue(config.contains("Endpoint = tether-ab12.local:51820"), config)
+        XCTAssertTrue(config.contains("# Where .local names don't work: Endpoint = [\(a)]:51820"), config)
+        _ = page.ask(.config, from: "2607:fb91:88a2:e822::99")
+        let named = session.wireGuardPeers[0]
+        XCTAssertEqual(named.host, "tether-ab12.local")
+
+        for next in [b, hotspot, a] {
+            address = next
+            session.syncWithHotspot()
+            XCTAssertFalse(session.needsNewConfig(named), next)
+        }
+        localName = "matts-iphone.local" // renamed in Settings
+        XCTAssertTrue(session.needsNewConfig(named))
+    }
+
+    /// Before any device joins the hotspot on an IPv6-only carrier there's no address to give, but the
+    /// name works already, so the QR code can show.
+    func testANameMakesAConfigBeforeTheHotspotIsOn() throws {
+        localName = "tether-ab12.local"
+        ipv6Only = true
+        makeSession()
+        session.syncWithHotspot()
+        XCTAssertEqual(session.deviceHost, "tether-ab12.local")
+        localName = nil
+        XCTAssertNil(session.deviceHost, "without a name, still none")
+    }
+
+    /// A device whose config has the IPv6 address keeps it saved as an address, though a name now
+    /// leads to the same one, so it's still told when the address goes.
+    func testADeviceSetUpWithAnAddressIsntTakenForANamedOne() throws {
+        var saved = WireGuardSetup.new()
+        let a = "2607:fb91:88a2:e822::a"
+        let pc = try XCTUnwrap(saved.addPeer(name: "PC", host: a))
+        localName = "tether-ab12.local"
+        makeSession(saved: saved)
+        address = a
+        server.connected = [pc.address]
+        server.endpoints = [pc.address: "[2607:fb91:88a2:e822::99]:51820"]
+        session.syncWithHotspot()
+        session.watch()
+        XCTAssertEqual(devices.setup.peers.first?.host, a)
     }
 
     /// The server tells where each device's last handshake came from, so a connected device points

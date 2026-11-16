@@ -155,19 +155,21 @@ final class Model: ObservableObject {
         settingsDefaults = demo?.settingsDefaults() ?? .standard
         noticeCenter = demo?.noticeCenter() ?? SystemNoticeCenter(log: Self.append)
         hostName = HostName(store: demo != nil ? InMemorySecrets() : KeychainSecrets(service: HostName.service), log: Self.append)
+        settingsBackup = demo != nil ? nil : Self.settingsBackup(settingsDefaults)
         #else
         let secrets: SecretStore = KeychainSecrets()
         settingsDefaults = .standard
         hostName = HostName(store: KeychainSecrets(service: HostName.service), log: Self.append)
+        settingsBackup = Self.settingsBackup(settingsDefaults)
         noticeCenter = SystemNoticeCenter(log: Self.append)
         #endif
         notifier = Notifier(defaults: settingsDefaults)
         Self.settleLocalNetworks(settingsDefaults, secrets: secrets) // before the session reads it (#230)
         poster = NoticePoster(center: noticeCenter)
         #if DEBUG
-        session = demo?.makeSession(log: Self.append) ?? Self.session(secrets: secrets, settings: settingsDefaults)
+        session = demo?.makeSession(log: Self.append) ?? Self.session(secrets: secrets, settings: settingsDefaults, hostName: hostName)
         #else
-        session = Self.session(secrets: secrets, settings: settingsDefaults)
+        session = Self.session(secrets: secrets, settings: settingsDefaults, hostName: hostName)
         #endif
         session.willChange = { [weak self] in self?.objectWillChange.send() }
         #if DEBUG
@@ -201,6 +203,7 @@ final class Model: ObservableObject {
                 self?.checkLocalNetworkWhenTheHotspotComesUp()
                 self?.publishHostName()
                 self?.publishWidgets()
+                self?.settingsBackup?.save()
                 self?.notify()
                 // The slack lets iOS wake the app for this together with other timers.
                 let interval = KeepAlivePolicy.watchInterval(sceneActive: self?.session.sceneActive ?? false)
@@ -217,7 +220,15 @@ final class Model: ObservableObject {
     }
 
     /// The session with the real server, sound, page and hotspot.
-    private static func session(secrets: SecretStore, settings: UserDefaults) -> HotspotSession {
+    /// Puts back settings an install dropped, before anything reads them.
+    private static func settingsBackup(_ settings: UserDefaults) -> SettingsBackup {
+        let backup = SettingsBackup(defaults: settings, domain: Bundle.main.bundleIdentifier ?? "", store: KeychainSecrets(service: SettingsBackup.service),
+                                    log: Self.append)
+        backup.restoreIfLost()
+        return backup
+    }
+
+    private static func session(secrets: SecretStore, settings: UserDefaults, hostName: HostName) -> HotspotSession {
         HotspotSession(devices: WireGuardDevices(secrets: secrets), server: WireGuardServer(log: Self.append),
                        keepAlive: KeepAlive(log: Self.append), page: ConfigPageServer(),
                        sceneActive: UIApplication.shared.applicationState != .background,
@@ -232,6 +243,7 @@ final class Model: ObservableObject {
                        resetDay: { ResetDay.saved(in: settings) },
                        internetVPN: Interfaces.internetVPN,
                        onlyThroughVPN: { settings.bool(forKey: HotspotSession.onlyThroughVPNKey) },
+                       localName: { key in MainActor.assumeIsolated { hostName.name(for: key).map { "\($0).local" } } },
                        log: Self.append)
     }
 
@@ -267,6 +279,8 @@ final class Model: ObservableObject {
     private let pathMonitor = NWPathMonitor()
     /// <name>.local on the hotspot while sharing, see `HostName`.
     private let hostName: HostName
+    /// The settings' copy in the Keychain, nil in a demo, see `SettingsBackup`.
+    private let settingsBackup: SettingsBackup?
     private var sampler: Task<Void, Never>?
 
     /// After each watcher round: what to tell, see `Notifier`. In the background the round has just

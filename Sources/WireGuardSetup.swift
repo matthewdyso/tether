@@ -219,8 +219,11 @@ struct WireGuardSetup: Codable, Equatable {
     /// since only its private key is kept. All traffic goes into the tunnel, IPv6 too, so nothing
     /// slips past Tether onto the hotspot directly. Lookups go to Tether, which asks the server picked
     /// in Settings, see `DNSChoice`.
-    func clientConfig(for ready: Ready, host: String = Hotspot.host) -> String {
-        """
+    /// `fallback` is an address for a device that can't look a .local `host` up, as a comment by the
+    /// Endpoint, see `HotspotSession.deviceHost`.
+    func clientConfig(for ready: Ready, host: String = Hotspot.host, fallback: String? = nil) -> String {
+        let alternative = fallback.map { "# Where .local names don't work: Endpoint = \(Hotspot.withPort($0, Self.port))\n" } ?? ""
+        return """
         [Interface]
         PrivateKey = \(ready.privateKey.base64EncodedString())
         Address = \(ready.address)/32
@@ -229,7 +232,7 @@ struct WireGuardSetup: Codable, Equatable {
 
         [Peer]
         PublicKey = \(serverPublicKey.base64EncodedString())
-        Endpoint = \(Hotspot.withPort(host, Self.port))
+        \(alternative)Endpoint = \(Hotspot.withPort(host, Self.port))
         AllowedIPs = 0.0.0.0/0, ::/0
         PersistentKeepalive = 25
 
