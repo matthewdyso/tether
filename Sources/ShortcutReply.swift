@@ -11,7 +11,7 @@ enum ShortcutReply {
         var proxyInUse = false
         /// Sharing stopped after a time with no device connected, see `IdleStop`.
         var idleStopped = false
-        /// Stop on a widget or in Control Center stopped it, see `HotspotSession.stopNow`.
+        /// Stop on a widget, in Control Center or in Shortcuts stopped it, see `HotspotSession.stopNow`.
         var stoppedByYou = false
         /// The silent sound plays while the hotspot is on. Without it iOS suspends Tether as soon as
         /// the action ends, so it isn't sharing for long (#164).
@@ -47,5 +47,21 @@ enum ShortcutReply {
         case let (n, false): return "Tether is sharing with \(n) devices."
         case let (n, true): return "Tether is sharing with \(n) devices and the proxy."
         }
+    }
+
+    /// After Stop Tether.
+    static func stop(wasRunning: Bool) -> String {
+        wasRunning ? "Tether stopped sharing. Open it, or run Start Tether, to share again." : "Tether is stopped."
+    }
+
+    /// One device, for Get Tether Devices. Foundation only, like the rest, so `swift test` covers it.
+    struct Device: Equatable {
+        var id: UUID
+        var name: String
+        var connected: Bool
+        var paused: Bool
+        var lastConnected: Date?
+        /// Both ways, this month, the way the device's screen counts it.
+        var bytesThisMonth: UInt64
     }
 }

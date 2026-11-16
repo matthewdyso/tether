@@ -508,6 +508,11 @@ final class Model: ObservableObject {
         }
     }
 
+    /// See `HotspotSession.shortcutDevices`.
+    func shortcutDevices() -> [ShortcutReply.Device] {
+        session.shortcutDevices()
+    }
+
     func resetWireGuard() {
         session.resetWireGuard()
     }

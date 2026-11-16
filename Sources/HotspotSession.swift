@@ -606,6 +606,16 @@ final class HotspotSession {
                                    keptAlive: !running || keepAlive.sounding, blockedWithoutVPN: blockedWithoutVPN)
     }
 
+    /// Every saved device for Get Tether Devices, connected by the server's latest read, like
+    /// `shortcutState`, so a launch in the background for the action counts too.
+    func shortcutDevices() -> [ShortcutReply.Device] {
+        let connected = running && server.running ? unpaused(server.snapshot().connected) : wireGuardConnected
+        return wireGuardPeers.map {
+            ShortcutReply.Device(id: $0.id, name: $0.name, connected: connected.contains($0.address), paused: $0.paused != nil,
+                                 lastConnected: lastConnected(of: $0.id), bytesThisMonth: usage(of: $0.id).thisMonth.total)
+        }
+    }
+
     /// On screen, or the sound sounds while the hotspot is on: without it iOS suspends Tether soon,
     /// so it isn't sharing for long (#164), and the widgets mustn't say it is.
     var staysRunning: Bool { !running || heldAwake }
