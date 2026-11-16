@@ -85,10 +85,14 @@ Each device has its own key. It works until you remove the device in Tether, whi
 
 ## Start it from Shortcuts
 
-Once no device has been on the hotspot for 10 minutes, iOS suspends Tether, and it has to be opened again before the hotspot comes back. Shortcuts can do that for you. Tether adds two actions to the Shortcuts app, with nothing to set up:
+Once no device has been on the hotspot for 10 minutes, iOS suspends Tether, and it has to be opened again before the hotspot comes back. Shortcuts can do that for you. Tether adds these actions to the Shortcuts app, with nothing to set up:
 
 - **Start Tether** wakes Tether in the background, the same as opening it, but it stays off the screen. It shares as soon as a device joins Personal Hotspot in the next 10 minutes. (iOS only makes the hotspot's network while a device is on it, so that's when Tether can see it.)
+- **Stop Tether** stops sharing until Tether is opened or Start Tether runs.
 - **Is Tether Sharing?** says whether Tether is sharing and how many devices are connected. It gives true or false, for an If.
+- **Get Tether Status** gives Sharing, Connected Devices, Through a VPN, Hotspot Name and Problem, each for an If.
+- **Get Tether Devices** gives each device with its name, Connected, Paused, Last Connected and Data This Month.
+- **Pause Tether Device** and **Resume Tether Device** do what Pause and Resume on a device's screen do.
 
 You can also say "Start Tether" to Siri, find it in Spotlight, or put it on the Action button.
 
@@ -97,6 +101,16 @@ iOS has no automation for "Personal Hotspot turned on", so let one shortcut turn
 1. In Shortcuts, make a new shortcut named **Hotspot** with two actions: **Set Personal Hotspot** set to On, then **Start Tether**.
 2. Run it instead of turning on the hotspot in Settings: from the Action button, a widget, or Siri ("Hotspot").
 3. To have it run by itself, add an automation in Shortcuts > Automation that runs Hotspot and is set to Run Immediately. For example, when your car's Bluetooth connects, when you arrive somewhere you share from, or at a time of day.
+
+### With a VPN
+
+Tether can't turn another app's VPN on, but Shortcuts can: its **Set VPN** action lists every VPN on the iPhone (WireGuard tunnels, ProtonVPN, Tailscale), and some VPN apps add their own actions. Tether checks the result: Get Tether Status says whether the internet goes out through a VPN, and Settings > VPN > Only share through a VPN keeps every device out while it doesn't.
+
+- **Share with VPN:** Set Personal Hotspot On, Set VPN (your VPN) Connect, Start Tether, then Repeat 20 times: Get Tether Status, If Connected Devices is 0, Wait 15 seconds, End If. End with Show Result (Get Tether Status). With Only share through a VPN on, nothing leaks if the VPN is slow to connect.
+- **Stop sharing:** Stop Tether, Set VPN (your VPN) Disconnect, Set Personal Hotspot Off.
+- **Pause a device at night:** a time of day automation that runs Pause Tether Device (pick it), and another in the morning that runs Resume Tether Device.
+
+iOS has no automation for a device joining the hotspot, so run these from the Action button, a widget, Siri or an automation of your own.
 
 ## DNS
 
