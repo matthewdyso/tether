@@ -509,6 +509,15 @@ final class HotspotSession {
                                    blockedWithoutVPN: blockedWithoutVPN)
     }
 
+    /// For the widgets: sharing, or waiting for the hotspot with the sound keeping Tether running.
+    var awake: Bool { idleStopped == nil && (running || keepAlive.playing) }
+
+    /// The connected devices' names for the widgets, in the list's order, by the latest read.
+    var connectedNames: [String] {
+        let connected = connectedNow
+        return wireGuardPeers.filter { connected.contains($0.address) }.map(\.name)
+    }
+
     /// Every saved device for Get Tether Devices, connected by the server's latest read, like
     /// `shortcutState`, so a launch in the background for the action counts too.
     func shortcutDevices() -> [ShortcutReply.Device] {

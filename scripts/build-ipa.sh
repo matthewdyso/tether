@@ -64,6 +64,12 @@ licenses=$out/LICENSES.txt
 } > "$licenses"
 cp "$licenses" "$app/"
 
+# An ad-hoc signature, with no identity, only so the entitlements travel: SideStore, AltStore and other
+# signers read the app group from it and keep it when they sign, and without it the widgets have no
+# way to Tether's state. The extension first, since the app's signature covers it.
+codesign -f -s - --entitlements Widgets/TetherWidgets.entitlements "$app/PlugIns/TetherWidgets.appex"
+codesign -f -s - --entitlements Sources/Tether.entitlements "$app"
+
 mkdir "$work/Payload"
 cp -R "$app" "$work/Payload/"
 rm -f "$out/Tether.ipa"

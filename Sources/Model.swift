@@ -30,10 +30,12 @@
 //   WireGuardServer.swift  runs the WireGuard server (WireGuard/, Go)
 //   KeepAlive.swift, KeepAlivePolicy.swift  the silent sound that keeps Tether running
 
+import ActivityKit
 import Network
 import OSLog
 import SwiftUI
 import UIKit
+import WidgetKit
 
 extension KeepAlive: KeepAliveSound {}
 
@@ -198,6 +200,7 @@ final class Model: ObservableObject {
                 Self.debugLog.takeSource() // the Go server's lines, also when Tether has nothing to say
                 self?.checkLocalNetworkWhenTheHotspotComesUp()
                 self?.publishHostName()
+                self?.publishWidgets()
                 self?.notify()
                 // The slack lets iOS wake the app for this together with other timers.
                 let interval = KeepAlivePolicy.watchInterval(sceneActive: self?.session.sceneActive ?? false)
@@ -254,6 +257,11 @@ final class Model: ObservableObject {
     }
 
     private var watcher: Task<Void, Never>?
+    /// What the widgets were last given, so they're reloaded only on a change.
+    private var widgetState: WidgetState?
+    /// The Live Activity while sharing, see `followLiveActivity`.
+    private var activity: Activity<TetherActivityAttributes>?
+    private var activityFailure: String?
     /// Tells the session at once when the network changes, so Only share through a VPN pauses the
     /// devices as the VPN goes, not at the next round.
     private let pathMonitor = NWPathMonitor()
@@ -364,6 +372,52 @@ final class Model: ObservableObject {
         let picked = hostName.pick(typed)
         publishHostName()
         return picked
+    }
+
+    /// Gives the widgets, the Control Center button and the Live Activity where Tether stands, through
+    /// the app group, and asks iOS to redraw them when it changed. Each watcher round, and after their
+    /// own Start and Stop.
+    func publishWidgets() {
+        #if DEBUG
+        if demo != nil { return }
+        #endif
+        let state = WidgetState(sharing: session.sharing, awake: session.awake, problem: session.wireGuardProblem,
+                                connected: session.connectedNames, vpn: session.vpnInterface != nil,
+                                blockedWithoutVPN: session.blockedWithoutVPN, hotspotName: hotspotName)
+        followLiveActivity(state)
+        guard state != widgetState else { return }
+        widgetState = state
+        state.save()
+        WidgetCenter.shared.reloadAllTimelines()
+        if #available(iOS 18, *) { ControlCenter.shared.reloadAllControls() }
+    }
+
+    /// A Live Activity while sharing, updated when the devices or the VPN change, ended when sharing
+    /// stops. iOS starts one only while Tether is on screen or runs an action, so one that couldn't
+    /// start is tried again each round. One left from before a relaunch is taken over, not doubled.
+    private func followLiveActivity(_ state: WidgetState) {
+        if activity == nil { activity = Activity<TetherActivityAttributes>.activities.first }
+        let content = TetherActivityAttributes.ContentState(connected: state.connected, vpn: state.vpn,
+                                                            blockedWithoutVPN: state.blockedWithoutVPN)
+        guard state.sharing else {
+            if let activity { Task { await activity.end(nil, dismissalPolicy: .immediate) } }
+            activity = nil
+            return
+        }
+        if let activity {
+            if activity.content.state != content { Task { await activity.update(ActivityContent(state: content, staleDate: nil)) } }
+            return
+        }
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+        do {
+            activity = try Activity.request(attributes: TetherActivityAttributes(hotspotName: state.hotspotName ?? "tether"),
+                                            content: ActivityContent(state: content, staleDate: nil))
+            activityFailure = nil
+        } catch {
+            let failure = "Live Activity: \(error)"
+            if failure != activityFailure { Self.append(failure) }
+            activityFailure = failure
+        }
     }
 
     private func publishHostName() {
