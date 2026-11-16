@@ -230,7 +230,9 @@ final class Model: ObservableObject {
 
     private static func session(secrets: SecretStore, settings: UserDefaults, hostName: HostName) -> HotspotSession {
         HotspotSession(devices: WireGuardDevices(secrets: secrets), server: WireGuardServer(log: Self.append),
-                       keepAlive: KeepAlive(log: Self.append), page: ConfigPageServer(),
+                       keepAlive: KeepAliveWithLocation(sound: KeepAlive(log: Self.append),
+                                                        enabled: { settings.bool(forKey: KeepAliveWithLocation.key) }, log: Self.append),
+                       page: ConfigPageServer(),
                        sceneActive: UIApplication.shared.applicationState != .background,
                        hotspotAddress: HotspotAddressKeeper(defaults: .standard).address,
                        carrierIPv6Only: Interfaces.carrierIPv6Only,

@@ -21,6 +21,8 @@ struct SettingsView: View {
     @AppStorage private var localNetworksAllowed: Bool
     /// Read by `HotspotSession.checkVPN`, which runs at once on a change.
     @AppStorage private var onlyThroughVPN: Bool
+    /// Read by `KeepAliveWithLocation` each watcher round.
+    @AppStorage private var keepRunningWithLocation: Bool
     /// The hotspot name as typed, empty for the one from the keys. Saved on Return, see `Model.pickHotspotName`.
     @State private var typedHotspotName = ""
     @State private var hotspotNameRefused = false
@@ -34,6 +36,7 @@ struct SettingsView: View {
         _dnsControlD = AppStorage(wrappedValue: "", DNSChoice.controlDKey, store: model.settingsDefaults)
         _localNetworksAllowed = AppStorage(wrappedValue: false, LocalNetworks.key, store: model.settingsDefaults)
         _onlyThroughVPN = AppStorage(wrappedValue: false, HotspotSession.onlyThroughVPNKey, store: model.settingsDefaults)
+        _keepRunningWithLocation = AppStorage(wrappedValue: false, KeepAliveWithLocation.key, store: model.settingsDefaults)
     }
 
     var body: some View {
@@ -118,10 +121,13 @@ struct SettingsView: View {
             .accessibilityIdentifier("sharing.resetDay")
             // The screens show the new dates as soon as Settings closes (#187).
             .onChange(of: resetDay) { model.resetDayChanged() }
+            Toggle("Keep running with location", isOn: $keepRunningWithLocation)
+                .onChange(of: keepRunningWithLocation) { model.syncWithHotspot() } // asks for location now, on screen
+                .accessibilityIdentifier("sharing.location")
         } header: {
             Text("Sharing")
         } footer: {
-            Text("Idle means no device is connected. Stopping saves battery. Open Tether to share again. Data counts start again on this day each month. Set it to your plan's billing day so the limits match your carrier.")
+            Text("Idle means no device is connected. Stopping saves battery. Open Tether to share again. Data counts start again on this day each month. Set it to your plan's billing day so the limits match your carrier. Keep running with location keeps Tether going through calls, which stop its silent sound. It uses rough location from cell towers, which costs a little battery, and Tether never reads or keeps it. Allow it Always, so Start Tether works in the background too.")
                 .accessibilityIdentifier("sharing.footer")
         }
     }
