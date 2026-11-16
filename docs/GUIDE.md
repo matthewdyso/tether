@@ -93,10 +93,14 @@ The proxy has one row under Devices, Proxy, for all the devices on it together, 
 
 ## Start it from Shortcuts
 
-Once no device has been on the hotspot for 10 minutes, iOS suspends Tether, and it has to be opened again before the hotspot comes back. Shortcuts can do that for you. Tether adds two actions to the Shortcuts app, with nothing to set up:
+Once no device has been on the hotspot for 10 minutes, iOS suspends Tether, and it has to be opened again before the hotspot comes back. Shortcuts can do that for you. Tether adds these actions to the Shortcuts app, with nothing to set up:
 
 - **Start Tether** wakes Tether in the background, the same as opening it, but it stays off the screen. It shares as soon as a device joins Personal Hotspot in the next 10 minutes. (iOS only makes the hotspot's network while a device is on it, so that's when Tether can see it.)
+- **Stop Tether** stops sharing until Tether is opened or Start Tether runs.
 - **Is Tether Sharing?** says whether Tether is sharing, how many devices are connected, and whether the proxy is in use. It gives true or false, for an If.
+- **Get Tether Status** gives Sharing, Connected Devices, Through a VPN, Hotspot Name and Problem, each for an If.
+- **Get Tether Devices** gives each device with its name, Connected, Paused, Last Connected and Data This Month.
+- **Pause Tether Device** and **Resume Tether Device** do what Pause and Resume on a device's screen do.
 
 You can also say "Start Tether" to Siri, find it in Spotlight, or put it on the Action button.
 
@@ -116,6 +120,15 @@ Tether shows where it stands without being opened:
 - **Live Activity** on the Lock Screen and in the Dynamic Island while Tether shares or waits for a device on the hotspot: the connected devices and the VPN. It ends when Tether stops.
 
 Start does what Start Tether in Shortcuts does. Stop stops sharing until you open Tether or start it again, with nothing told in a notification. Both need the iPhone unlocked. While Tether is open, Stop does nothing: there, turning off Personal Hotspot is what stops it. To save the battery, the widgets and the Live Activity are redrawn only when something changes: sharing starts or stops, a device connects or leaves, or the VPN goes on or off. They show no speeds or data counts. If iOS closes Tether without a word, a widget notices the next time it's redrawn, within 15 minutes, and says Stopped. The Live Activity starts when Tether is on screen or a widget starts it, and once swiped away it stays away until Tether is stopped and started. It's renewed about three times an hour, and says Open Tether to check if Tether hasn't renewed it. With SideStore and AltStore the widgets read Tether through an app group in the IPA's signature. A signer that drops it leaves them saying No data.
+### With a VPN
+
+Tether can't turn another app's VPN on, but Shortcuts can: its **Set VPN** action lists every VPN on the iPhone (WireGuard tunnels, ProtonVPN, Tailscale), and some VPN apps add their own actions. Tether checks the result: Get Tether Status says whether the internet goes out through a VPN, and Settings > VPN > Only share through a VPN keeps every device out while it doesn't.
+
+- **Share with VPN:** Set Personal Hotspot On, Set VPN (your VPN) Connect, Start Tether, then Repeat 20 times: Get Tether Status, If Connected Devices is 0, Wait 15 seconds, End If. End with Show Result (Get Tether Status). With Only share through a VPN on, nothing leaks if the VPN is slow to connect.
+- **Stop sharing:** Stop Tether, Set VPN (your VPN) Disconnect, Set Personal Hotspot Off.
+- **Pause a device at night:** a time of day automation that runs Pause Tether Device (pick it), and another in the morning that runs Resume Tether Device.
+
+iOS has no automation for a device joining the hotspot, so run these from the Action button, a widget, Siri or an automation of your own.
 
 ## DNS
 
