@@ -39,6 +39,8 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_CFBundleDisplayName: Tether
         INFOPLIST_KEY_NSLocalNetworkUsageDescription: Your devices connect to Tether over the hotspot. Without this, Tether can't answer them.
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: With Keep running with location on, location updates keep Tether running through calls. Tether never reads or keeps where you are.
+        INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription: With Keep running with location on, location updates keep Tether running through calls, also after Start Tether wakes it in the background. Tether never reads or keeps where you are.
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
@@ -71,7 +73,7 @@ targets:
     info:
       path: Sources/Info.plist
       properties:
-        UIBackgroundModes: [audio]
+        UIBackgroundModes: [audio, location] # location only with Settings > Keep running with location
         NSSupportsLiveActivities: true
         TetherAppGroup: group.$(APP_BUNDLE_ID)
         NSBonjourServices: [_tether._tcp] # see LocalNetworkCheck
