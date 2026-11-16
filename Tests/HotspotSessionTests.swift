@@ -1547,6 +1547,39 @@ final class HotspotSessionTests: XCTestCase {
         XCTAssertTrue(sound.playing)
     }
 
+    /// Stop Tether in Shortcuts stops at once, stays stopped with the hotspot on, and tells nothing.
+    func testStopTetherStopsUntilStartTether() {
+        shareInTheBackground()
+        XCTAssertTrue(session.stopNow(), "it was sharing")
+        XCTAssertFalse(session.sharing)
+        XCTAssertFalse(server.running)
+        XCTAssertFalse(sound.playing, "so iOS suspends Tether")
+        XCTAssertEqual(session.idleStopped?.byYou, true)
+        XCTAssertTrue(session.shortcutState().stoppedByYou)
+        now = minutes(5)
+        session.watch()
+        XCTAssertFalse(server.running, "the hotspot is still on, but it stays stopped")
+        XCTAssertFalse(session.stopNow(), "stopping again changes nothing")
+        XCTAssertTrue(session.wake())
+        XCTAssertTrue(server.running)
+        XCTAssertFalse(session.shortcutState().stoppedByYou)
+    }
+
+    func testGetTetherDevicesListsEachDeviceWithWhetherItsConnected() throws {
+        var saved = WireGuardSetup.new()
+        let peer = try XCTUnwrap(saved.addPeer(name: "iPad"))
+        makeSession(saved: saved)
+        server.connected = [peer.address]
+        address = hotspot
+        session.syncWithHotspot()
+        let devices = session.shortcutDevices()
+        XCTAssertEqual(devices.map(\.name), [peer.name])
+        XCTAssertEqual(devices.first?.connected, true)
+        XCTAssertEqual(devices.first?.paused, false)
+        server.connected = []
+        XCTAssertEqual(session.shortcutDevices().first?.connected, false)
+    }
+
     func testStartTetherSharesAgain() {
         idleAfter = .tenMinutes
         shareInTheBackground()

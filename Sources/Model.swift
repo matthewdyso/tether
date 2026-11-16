@@ -323,6 +323,19 @@ final class Model: ObservableObject {
         session.shortcutState()
     }
 
+    func shortcutDevices() -> [ShortcutReply.Device] {
+        session.shortcutDevices()
+    }
+
+    /// See `HotspotSession.stopNow`.
+    @discardableResult
+    func stopNow() -> Bool {
+        #if DEBUG
+        if demo != nil { return false }
+        #endif
+        return session.stopNow()
+    }
+
     func resetWireGuard() {
         session.resetWireGuard()
     }

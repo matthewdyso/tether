@@ -9,6 +9,8 @@ enum ShortcutReply {
         var problem: String?
         /// Sharing stopped after a time with no device connected, see `IdleStop`.
         var idleStopped = false
+        /// Stop Tether stopped it, see `HotspotSession.stopNow`.
+        var stoppedByYou = false
         /// The silent sound plays while the hotspot is on. Without it iOS suspends Tether as soon as
         /// the action ends, so it isn't sharing for long (#164).
         var keptAlive = true
@@ -28,6 +30,7 @@ enum ShortcutReply {
     static func status(_ state: State) -> String {
         if state.running, let problem = state.problem { return "Personal Hotspot is on, but WireGuard isn't running. \(problem)" }
         if state.running, !state.keptAlive { return "Tether couldn't keep running in the background. Open it once." }
+        if state.stoppedByYou { return "Tether is stopped. Open it, or run Start Tether, to share again." }
         if state.idleStopped { return "Tether stopped sharing while idle. Open it, or run Start Tether, to share again." }
         // iOS makes the hotspot's network only while a device is on it, so no device and the hotspot off look the same.
         guard state.running else { return "Tether is waiting for a device to join Personal Hotspot." }
@@ -36,5 +39,21 @@ enum ShortcutReply {
         case 1: return "Tether is sharing with 1 device."
         case let n: return "Tether is sharing with \(n) devices."
         }
+    }
+
+    /// After Stop Tether.
+    static func stop(wasRunning: Bool) -> String {
+        wasRunning ? "Tether stopped sharing. Open it, or run Start Tether, to share again." : "Tether is stopped."
+    }
+
+    /// One device, for Get Tether Devices. Foundation only, like the rest, so `swift test` covers it.
+    struct Device: Equatable {
+        var id: UUID
+        var name: String
+        var connected: Bool
+        var paused: Bool
+        var lastConnected: Date?
+        /// Both ways, this month, the way the device's screen counts it.
+        var bytesThisMonth: UInt64
     }
 }

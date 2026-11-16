@@ -471,7 +471,33 @@ final class HotspotSession {
             connected = unpaused(server.snapshot().connected)
         }
         return ShortcutReply.State(running: running, connected: connected.count, problem: wireGuardProblem,
-                                   idleStopped: idleStopped != nil, keptAlive: !running || keepAlive.sounding)
+                                   idleStopped: idleStopped != nil, stoppedByYou: idleStopped?.byYou == true,
+                                   keptAlive: !running || keepAlive.sounding)
+    }
+
+    /// Every saved device for Get Tether Devices, connected by the server's latest read, like
+    /// `shortcutState`, so a launch in the background for the action counts too.
+    func shortcutDevices() -> [ShortcutReply.Device] {
+        let connected = running && server.running ? unpaused(server.snapshot().connected) : wireGuardConnected
+        return wireGuardPeers.map {
+            ShortcutReply.Device(id: $0.id, name: $0.name, connected: connected.contains($0.address), paused: $0.paused != nil,
+                                 lastConnected: lastConnected(of: $0.id), bytesThisMonth: usage(of: $0.id).thisMonth.total)
+        }
+    }
+
+    /// Stop Tether in Shortcuts: stops sharing now, as the idle stop does, and stays stopped with the
+    /// hotspot on until Tether is opened or Start Tether runs (`wake`). The sound stops, so iOS
+    /// suspends Tether. Says whether it was sharing.
+    @discardableResult
+    func stopNow() -> Bool {
+        let was = running
+        guard idleStopped == nil || was else { return false }
+        log("stopped from Shortcuts, until Tether is opened")
+        idleStopped = IdleStopped(at: now(), after: idleStopAfter(), byYou: true)
+        if running { stopSharing() }
+        waitingSince = .distantPast // so the next rounds don't start the sound again, see keepAliveWhileSharing
+        keepAlive.stop()
+        return was
     }
 
     var wireGuardNeedsReset: Bool { devices.needsReset }
