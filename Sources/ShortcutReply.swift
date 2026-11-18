@@ -13,6 +13,8 @@ enum ShortcutReply {
         var idleStopped = false
         /// Stop on a widget, in Control Center or in Shortcuts stopped it, see `HotspotSession.stopNow`.
         var stoppedByYou = false
+        /// The internet goes out through a VPN, see `HotspotSession.vpnInterface`.
+        var vpn = false
         /// The silent sound plays while the hotspot is on. Without it iOS suspends Tether as soon as
         /// the action ends, so it isn't sharing for long (#164).
         var keptAlive = true

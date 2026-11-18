@@ -603,7 +603,8 @@ final class HotspotSession {
         let proxyInUse = proxy.map { ProxyStatus($0, stats: proxyStats, hotspotOn: running).inUse } ?? false
         return ShortcutReply.State(running: running, connected: connected.count, problem: wireGuardProblem, proxyInUse: proxyInUse,
                                    idleStopped: idleStopped != nil, stoppedByYou: idleStopped?.byYou == true,
-                                   keptAlive: !running || keepAlive.sounding, blockedWithoutVPN: blockedWithoutVPN)
+                                   vpn: vpnInterface != nil, keptAlive: !running || keepAlive.sounding,
+                                   blockedWithoutVPN: blockedWithoutVPN)
     }
 
     /// Every saved device for Get Tether Devices, connected by the server's latest read, like

@@ -6,8 +6,8 @@ import AppIntents
 // action, then runs Start Tether, which wakes Tether in the background without opening it.
 
 struct StartTetherIntent: AppIntent {
-    static var title: LocalizedStringResource = "Start Tether"
-    static var description = IntentDescription(
+    static let title: LocalizedStringResource = "Start Tether"
+    static let description = IntentDescription(
         "Wakes Tether in the background, the same as opening it. It shares as soon as a device joins Personal Hotspot in the next 10 minutes. Put it after Set Personal Hotspot.")
 
     @MainActor
@@ -20,8 +20,8 @@ struct StartTetherIntent: AppIntent {
 }
 
 struct TetherStatusIntent: AppIntent {
-    static var title: LocalizedStringResource = "Is Tether Sharing?"
-    static var description = IntentDescription(
+    static let title: LocalizedStringResource = "Is Tether Sharing?"
+    static let description = IntentDescription(
         "True while Tether is sharing Personal Hotspot, for an If in a shortcut. It also says how many devices are connected, and whether the proxy is in use.")
 
     @MainActor
@@ -53,8 +53,8 @@ struct TetherShortcuts: AppShortcutsProvider {
 
 /// Stops sharing until Tether is opened or Start Tether runs, for a shortcut that turns everything off.
 struct StopTetherIntent: AppIntent {
-    static var title: LocalizedStringResource = "Stop Tether"
-    static var description = IntentDescription(
+    static let title: LocalizedStringResource = "Stop Tether"
+    static let description = IntentDescription(
         "Stops sharing now, the same as the idle stop. Tether shares again when it's opened or Start Tether runs.")
 
     @MainActor
@@ -66,9 +66,9 @@ struct StopTetherIntent: AppIntent {
 
 /// Where Tether stands, as values a shortcut can test, not only a sentence.
 struct GetTetherStatusIntent: AppIntent {
-    static var title: LocalizedStringResource = "Get Tether Status"
-    static var description = IntentDescription(
-        "Whether Tether is sharing, how many devices are connected, the hotspot name, and the problem if there is one.")
+    static let title: LocalizedStringResource = "Get Tether Status"
+    static let description = IntentDescription(
+        "Whether Tether is sharing, how many devices are connected, whether the internet goes out through a VPN, the hotspot name, and the problem if there is one.")
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<TetherStatusEntity> {
@@ -79,10 +79,11 @@ struct GetTetherStatusIntent: AppIntent {
 }
 
 struct TetherStatusEntity: TransientAppEntity {
-    static var typeDisplayRepresentation: TypeDisplayRepresentation = "Tether Status"
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "Tether Status"
 
     @Property(title: "Sharing") var sharing: Bool
     @Property(title: "Connected Devices") var connectedDevices: Int
+    @Property(title: "Through a VPN") var vpn: Bool
     @Property(title: "Hotspot Name") var hotspotName: String
     @Property(title: "Problem") var problem: String
 
@@ -91,6 +92,7 @@ struct TetherStatusEntity: TransientAppEntity {
     init(_ state: ShortcutReply.State, name: String?) {
         sharing = state.sharing
         connectedDevices = state.connected
+        vpn = state.vpn
         hotspotName = name.map { "\($0).local" } ?? ""
         problem = state.problem ?? ""
     }
@@ -106,8 +108,8 @@ struct TetherStatusEntity: TransientAppEntity {
 
 /// A device in Tether's list, for Get Tether Devices and the Pause and Resume actions.
 struct TetherDeviceEntity: AppEntity {
-    static var typeDisplayRepresentation: TypeDisplayRepresentation = "Tether Device"
-    static var defaultQuery = TetherDeviceQuery()
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "Tether Device"
+    static let defaultQuery = TetherDeviceQuery()
 
     var id: UUID
     @Property(title: "Name") var name: String
@@ -143,8 +145,8 @@ struct TetherDeviceQuery: EntityQuery {
 }
 
 struct GetTetherDevicesIntent: AppIntent {
-    static var title: LocalizedStringResource = "Get Tether Devices"
-    static var description = IntentDescription(
+    static let title: LocalizedStringResource = "Get Tether Devices"
+    static let description = IntentDescription(
         "Every device in Tether's list, with whether it's connected or paused, when it last connected, and its data this month.")
 
     @Parameter(title: "Only Connected", default: false) var onlyConnected: Bool
@@ -163,8 +165,8 @@ struct GetTetherDevicesIntent: AppIntent {
 }
 
 struct PauseTetherDeviceIntent: AppIntent {
-    static var title: LocalizedStringResource = "Pause Tether Device"
-    static var description = IntentDescription("Stops a device from connecting until it's resumed, as Pause on its screen does.")
+    static let title: LocalizedStringResource = "Pause Tether Device"
+    static let description = IntentDescription("Stops a device from connecting until it's resumed, as Pause on its screen does.")
 
     @Parameter(title: "Device") var device: TetherDeviceEntity
 
@@ -172,14 +174,14 @@ struct PauseTetherDeviceIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        Model.shared.pauseWireGuardDevice(device.id)
+        try TetherDeviceError.change(device.id, toPaused: true) { Model.shared.pauseWireGuardDevice($0) }
         return .result(dialog: "\(device.name) is paused.")
     }
 }
 
 struct ResumeTetherDeviceIntent: AppIntent {
-    static var title: LocalizedStringResource = "Resume Tether Device"
-    static var description = IntentDescription("Lets a paused device connect again, as Resume on its screen does.")
+    static let title: LocalizedStringResource = "Resume Tether Device"
+    static let description = IntentDescription("Lets a paused device connect again, as Resume on its screen does.")
 
     @Parameter(title: "Device") var device: TetherDeviceEntity
 
@@ -187,7 +189,32 @@ struct ResumeTetherDeviceIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        Model.shared.resumeWireGuardDevice(device.id)
+        try TetherDeviceError.change(device.id, toPaused: false) { Model.shared.resumeWireGuardDevice($0) }
         return .result(dialog: "\(device.name) can connect again.")
+    }
+}
+
+/// Why Pause or Resume Tether Device didn't, so Shortcuts says so rather than that it did. Shortcuts
+/// shows the message of an error that conforms to CustomLocalizedStringResourceConvertible only.
+enum TetherDeviceError: Error, CustomLocalizedStringResourceConvertible {
+    /// Removed since the shortcut picked it.
+    case gone
+    /// The change couldn't be saved, see `HotspotSession.pause`.
+    case notSaved
+
+    var localizedStringResource: LocalizedStringResource {
+        switch self {
+        case .gone: "That device isn't in Tether anymore."
+        case .notSaved: "Tether couldn't save the change. Try again on the device's screen in Tether."
+        }
+    }
+
+    /// Runs `change` on the device and checks it took, by reading the list again.
+    @MainActor
+    static func change(_ id: UUID, toPaused paused: Bool, _ change: (UUID) -> Void) throws {
+        let model = Model.shared
+        guard model.shortcutDevices().contains(where: { $0.id == id }) else { throw gone }
+        change(id)
+        guard model.shortcutDevices().first(where: { $0.id == id })?.paused == paused else { throw notSaved }
     }
 }
