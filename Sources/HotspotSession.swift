@@ -518,9 +518,9 @@ final class HotspotSession {
     var awake: Bool { idleStopped == nil && (running || keepAlive.playing) }
 
     /// The connected devices' names for the widgets, in the list's order, by the latest read.
-    var connectedNames: [String] {
+    var connectedPeers: [WireGuardSetup.Peer] {
         let connected = connectedNow
-        return wireGuardPeers.filter { connected.contains($0.address) }.map(\.name)
+        return wireGuardPeers.filter { connected.contains($0.address) }
     }
 
     /// Every saved device for Get Tether Devices, connected by the server's latest read, like

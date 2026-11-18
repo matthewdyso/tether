@@ -22,7 +22,7 @@ struct StatusEntry: TimelineEntry {
 /// One entry, from what the app wrote. The app asks for a new one whenever something changes.
 struct StatusProvider: TimelineProvider {
     func placeholder(in context: Context) -> StatusEntry {
-        StatusEntry(date: Date(), state: WidgetState(sharing: true, awake: true, connected: ["MacBook"], vpn: true))
+        StatusEntry(date: Date(), state: WidgetState(sharing: true, awake: true, connected: [WidgetState.Device(id: UUID(), name: "MacBook")], vpn: true))
     }
 
     func getSnapshot(in context: Context, completion: @escaping (StatusEntry) -> Void) {
@@ -74,14 +74,14 @@ struct StatusView: View {
                     Text(state.title).font(.headline)
                     Text(detail).font(.caption).foregroundStyle(.secondary)
                     Spacer(minLength: 0)
-                    Button(intent: SetSharingIntent(!state.awake)) {
+                    Button(intent: SetSharingIntent(!state.awake, fromWidget: true)) {
                         Text(state.awake ? "Stop" : "Start").frame(maxWidth: .infinity)
                     }
                     .tint(state.awake ? .red : .green)
                 }
                 if family == .systemMedium {
                     VStack(alignment: .leading, spacing: 4) {
-                        ForEach(state.connected.prefix(4), id: \.self) { Label($0, systemImage: "laptopcomputer").font(.caption) }
+                        ForEach(state.connected.prefix(4)) { Label($0.name, systemImage: "laptopcomputer").font(.caption) }
                         if state.connected.isEmpty { Text("No device connected").font(.caption).foregroundStyle(.secondary) }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)

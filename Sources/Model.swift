@@ -390,41 +390,63 @@ final class Model: ObservableObject {
         return picked
     }
 
+    /// Which button ran the widgets' own Start or Stop. iOS redraws that one itself once the intent
+    /// returns, so asking for it too redrew it twice, and a widget's Stop spun twice before it showed
+    /// Stopped.
+    enum WidgetButton { case widget, control }
+
     /// Gives the widgets, the Control Center button and the Live Activity where Tether stands, through
-    /// the app group, and asks iOS to redraw them when it changed. Each watcher round, and after their
-    /// own Start and Stop.
+    /// the app group, and asks iOS to redraw them when it changed. Each watcher round.
     func publishWidgets() {
-        #if DEBUG
-        if demo != nil { return }
-        #endif
-        let state = WidgetState(sharing: session.sharing, awake: session.awake, problem: session.wireGuardProblem,
-                                connected: session.connectedNames, vpn: session.vpnInterface != nil,
-                                blockedWithoutVPN: session.blockedWithoutVPN, hotspotName: hotspotName)
+        guard let state = widgetStateNow() else { return }
         followLiveActivity(state)
+        reloadWidgets(state, redrawnByIOS: nil)
+    }
+
+    /// The same after the widgets' own Start and Stop, see `WidgetButton`. A Live Activity is ended
+    /// before this returns: after Stop iOS suspends Tether, and an end left to a task would wait.
+    func publishWidgets(after button: WidgetButton) async {
+        guard let state = widgetStateNow() else { return }
+        await followLiveActivity(state)?.value
+        reloadWidgets(state, redrawnByIOS: button)
+    }
+
+    private func widgetStateNow() -> WidgetState? {
+        #if DEBUG
+        if demo != nil { return nil }
+        #endif
+        return WidgetState(sharing: session.sharing, awake: session.awake, problem: session.wireGuardProblem,
+                           connected: session.connectedPeers.map { WidgetState.Device(id: $0.id, name: $0.name) }, vpn: session.vpnInterface != nil,
+                           blockedWithoutVPN: session.blockedWithoutVPN, hotspotName: hotspotName)
+    }
+
+    private func reloadWidgets(_ state: WidgetState, redrawnByIOS button: WidgetButton?) {
         guard state != widgetState else { return }
         widgetState = state
         state.save()
-        WidgetCenter.shared.reloadAllTimelines()
-        if #available(iOS 18, *) { ControlCenter.shared.reloadAllControls() }
+        if button != .widget { WidgetCenter.shared.reloadAllTimelines() }
+        if button != .control, #available(iOS 18, *) { ControlCenter.shared.reloadAllControls() }
     }
 
     /// A Live Activity while sharing, updated when the devices or the VPN change, ended when sharing
     /// stops. iOS starts one only while Tether is on screen or runs an action, so one that couldn't
     /// start is tried again each round. One left from before a relaunch is taken over, not doubled.
-    private func followLiveActivity(_ state: WidgetState) {
+    /// Gives the task that ends or updates it, nil when there's none.
+    @discardableResult
+    private func followLiveActivity(_ state: WidgetState) -> Task<Void, Never>? {
         if activity == nil { activity = Activity<TetherActivityAttributes>.activities.first }
-        let content = TetherActivityAttributes.ContentState(connected: state.connected, vpn: state.vpn,
+        let content = TetherActivityAttributes.ContentState(connected: state.connected.map(\.name), vpn: state.vpn,
                                                             blockedWithoutVPN: state.blockedWithoutVPN)
         guard state.sharing else {
-            if let activity { Task { await activity.end(nil, dismissalPolicy: .immediate) } }
+            let ending = activity
             activity = nil
-            return
+            return ending.map { ending in Task { await ending.end(nil, dismissalPolicy: .immediate) } }
         }
         if let activity {
-            if activity.content.state != content { Task { await activity.update(ActivityContent(state: content, staleDate: nil)) } }
-            return
+            guard activity.content.state != content else { return nil }
+            return Task { await activity.update(ActivityContent(state: content, staleDate: nil)) }
         }
-        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return nil }
         do {
             activity = try Activity.request(attributes: TetherActivityAttributes(hotspotName: state.hotspotName ?? "tether"),
                                             content: ActivityContent(state: content, staleDate: nil))
@@ -434,6 +456,7 @@ final class Model: ObservableObject {
             if failure != activityFailure { Self.append(failure) }
             activityFailure = failure
         }
+        return nil
     }
 
     private func publishHostName() {

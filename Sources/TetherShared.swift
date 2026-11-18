@@ -13,11 +13,17 @@ struct WidgetState: Codable, Equatable {
     /// idle stop, or once iOS may suspend it. The Control Center button shows this.
     var awake = false
     var problem: String?
-    /// The connected devices' names, in the list's order.
-    var connected: [String] = []
+    /// The connected devices, in the list's order.
+    var connected: [Device] = []
     var vpn = false
     var blockedWithoutVPN = false
     var hotspotName: String?
+
+    /// By its id, since two devices can have the same name.
+    struct Device: Codable, Equatable, Identifiable {
+        var id: UUID
+        var name: String
+    }
 
     static let key = "widget.state"
 
@@ -70,21 +76,26 @@ struct TetherActivityAttributes: ActivityAttributes {
 /// app's process, launched in the background if it isn't running, so it does what Start Tether and
 /// Stop Tether do. The widget extension compiles it too, for its buttons, but never runs it.
 struct SetSharingIntent: SetValueIntent, LiveActivityIntent {
-    static var title: LocalizedStringResource = "Turn Tether On or Off"
-    static var isDiscoverable = false
+    static let title: LocalizedStringResource = "Turn Tether On or Off"
+    static let isDiscoverable = false
 
     @Parameter(title: "On") var value: Bool
+    /// Run from a widget's button, not the Control Center button, see `Model.publishWidgets(after:)`.
+    @Parameter(title: "From a Widget", default: false) var fromWidget: Bool
 
     init() {}
 
-    init(_ on: Bool) { value = on }
+    init(_ on: Bool, fromWidget: Bool = false) {
+        value = on
+        self.fromWidget = fromWidget
+    }
 
     func perform() async throws -> some IntentResult {
         #if TETHER_APP
         await MainActor.run {
             if value { Model.shared.wake() } else { Model.shared.stopNow() }
-            Model.shared.publishWidgets()
         }
+        await Model.shared.publishWidgets(after: fromWidget ? .widget : .control)
         #endif
         return .result()
     }
