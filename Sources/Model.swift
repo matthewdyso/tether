@@ -110,6 +110,8 @@ final class Model: ObservableObject {
     private let poster: NoticePoster
 
     private let session: HotspotSession
+    /// The settings' copy in the Keychain, nil in a demo, see `SettingsBackup`.
+    private let settingsBackup: SettingsBackup?
     private static let logger = Logger(subsystem: "com.vsvirskyi.phoneshare", category: "tether")
     /// The log Settings shares, with the Go server's lines. A demo launch has its own, emptied at launch.
     nonisolated static let debugLog: DebugLog = {
@@ -179,10 +181,12 @@ final class Model: ObservableObject {
         let secrets: SecretStore = demo?.secrets() ?? KeychainSecrets()
         settingsDefaults = demo?.settingsDefaults() ?? .standard
         noticeCenter = demo?.noticeCenter() ?? SystemNoticeCenter(log: Self.append)
+        settingsBackup = demo != nil ? nil : Self.settingsBackup(settingsDefaults)
         #else
         let secrets: SecretStore = KeychainSecrets()
         settingsDefaults = .standard
         noticeCenter = SystemNoticeCenter(log: Self.append)
+        settingsBackup = Self.settingsBackup(settingsDefaults)
         #endif
         notifier = Notifier(defaults: settingsDefaults)
         Self.settleLocalNetworks(settingsDefaults, secrets: secrets) // before the session reads it (#230)
@@ -234,6 +238,7 @@ final class Model: ObservableObject {
                 self?.checkLocalNetworkWhenTheHotspotComesUp()
                 self?.publishWidgets()
                 self?.notify()
+                self?.settingsBackup?.save()
                 // The slack lets iOS wake the app for this together with other timers.
                 let interval = KeepAlivePolicy.watchInterval(sceneActive: self?.session.sceneActive ?? false)
                 try? await Task.sleep(for: interval.every, tolerance: interval.tolerance)
@@ -252,6 +257,14 @@ final class Model: ObservableObject {
     }
 
     /// The session with the real server, sound, page and hotspot.
+    /// Puts back settings an install dropped, before anything reads them.
+    private static func settingsBackup(_ settings: UserDefaults) -> SettingsBackup {
+        let backup = SettingsBackup(defaults: settings, domain: Bundle.main.bundleIdentifier ?? "", store: KeychainSecrets(service: SettingsBackup.service),
+                                    log: Self.append)
+        backup.restoreIfLost()
+        return backup
+    }
+
     private static func session(secrets: SecretStore, settings: UserDefaults) -> HotspotSession {
         HotspotSession(devices: WireGuardDevices(secrets: secrets), server: WireGuardServer(log: Self.append),
                        keepAlive: KeepAliveWithLocation(sound: KeepAlive(log: Self.append),
