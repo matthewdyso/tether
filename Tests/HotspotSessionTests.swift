@@ -687,7 +687,7 @@ final class HotspotSessionTests: XCTestCase {
         XCTAssertEqual(names?.changes, ["\(name) \(a)"], "the name answers with the address Tether listens on")
         session.openAddWindow()
         let ready = try XCTUnwrap(session.wireGuardReady)
-        XCTAssertTrue(try XCTUnwrap(session.wireGuardConfig(for: ready)).contains("Endpoint = [\(a)]:51820\n"), "the QR code")
+        XCTAssertTrue(try XCTUnwrap(session.wireGuardConfig(for: ready)).contains("Endpoint = \(name):51820\n"), "the QR code, in the fork")
         let v6Client = "2607:fb91:88a2:e822::99"
         let page6 = page.ask(.page, from: v6Client)
         XCTAssertTrue(offersMac(page6))
@@ -872,6 +872,42 @@ final class HotspotSessionTests: XCTestCase {
 
     /// A device on the name that connects over IPv6 keeps the name: its config has it, not the address
     /// the handshake came to. Overwritten, it would be told to add itself again at the next address.
+    /// Fork only: the QR code names the iPhone on an IPv6 hotspot, and the device that connects with
+    /// it is saved on the name, so a new address doesn't ask for a new config.
+    func testADeviceFromAQRCodeOnAnIPv6HotspotIsSavedOnTheName() throws {
+        names = FakeHostName()
+        makeSession()
+        let a = "2607:fb91:88a2:e822::a", b = "2607:fb91:88a3:1234::b"
+        address = a
+        session.syncWithHotspot()
+        session.openAddWindow()
+        let ready = try XCTUnwrap(session.wireGuardReady)
+        XCTAssertTrue(try XCTUnwrap(session.wireGuardConfig(for: ready)).contains("Endpoint = \(name()):51820\n"))
+        server.connected = [ready.address]
+        server.endpoints = [ready.address: "[2607:fb91:88a2:e822::99]:51820"]
+        session.sampleTraffic()
+        XCTAssertEqual(session.wireGuardPeers.map(\.host), [name()])
+        server.connected = []
+        address = b
+        session.syncWithHotspot()
+        XCTAssertFalse(session.needsNewConfig(try XCTUnwrap(session.wireGuardPeers.first)))
+    }
+
+    /// Without the name answered the QR code keeps the address, and so does the saved device.
+    func testAQRCodeKeepsTheAddressWhileTheNameIsntAnswered() throws {
+        makeSession()
+        let a = "2607:fb91:88a2:e822::a"
+        address = a
+        session.syncWithHotspot()
+        session.openAddWindow()
+        let ready = try XCTUnwrap(session.wireGuardReady)
+        XCTAssertTrue(try XCTUnwrap(session.wireGuardConfig(for: ready)).contains("Endpoint = [\(a)]:51820\n"))
+        server.connected = [ready.address]
+        server.endpoints = [ready.address: "[2607:fb91:88a2:e822::99]:51820"]
+        session.sampleTraffic()
+        XCTAssertEqual(session.wireGuardPeers.map(\.host), [a])
+    }
+
     func testAConnectedDeviceOnTheNameKeepsIt() throws {
         names = FakeHostName()
         makeSession()

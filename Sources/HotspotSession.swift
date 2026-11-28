@@ -153,6 +153,9 @@ final class HotspotSession {
     private let now: () -> Date
     /// mDNS for the iPhone's name on IPv6, see `HostName`. Nil gives the devices the address itself.
     private let hostName: HostNamePublishing?
+    /// The device and host of the last QR code's config, so a device that connects with a code that
+    /// named the iPhone is saved on the name, see `claimReady`.
+    private var codeGiven: (address: String, host: String)?
     /// What the cellular data has, like "pdp_ip0: IPv6, data line: LTE", read for the log when the
     /// hotspot goes away (#191).
     private let cellular: @MainActor () -> String
@@ -944,8 +947,20 @@ final class HotspotSession {
     }
 
     /// The QR code's config. None while there's no `deviceHost`, so no config is made that can't connect.
+    /// On a carrier that gives the iPhone IPv6 only it names the iPhone while mDNS answers the name,
+    /// as the page's config for a Mac does, so the device keeps connecting after the next cellular
+    /// session's new address (#65). Fork only: upstream keeps the address here until .local names
+    /// are tried on more devices.
     func wireGuardConfig(for ready: WireGuardSetup.Ready) -> String? {
-        wireGuardConfig(for: ready, host: deviceHost)
+        let host = codeHost
+        codeGiven = host.map { (ready.address, $0) }
+        return wireGuardConfig(for: ready, host: host)
+    }
+
+    /// Where the QR code's config points: the name in place of an IPv6 address, while it's answered.
+    private var codeHost: String? {
+        guard let host = deviceHost else { return nil }
+        return host.contains(":") ? publishedName ?? host : host
     }
 
     private func wireGuardConfig(for ready: WireGuardSetup.Ready, host: String?) -> String? {
@@ -1116,8 +1131,10 @@ final class HotspotSession {
               // Handshake times come in whole seconds, so one in the window's last second can't be told
               // from one just after it: only an earlier second counts.
               end == nil || reached.lastHandshake.map { $0 < end!.wholeSecondsDown } ?? true,
-              let host = host(reachedFrom: reached.endpoint),
-              devices.claimReady(address: ready.address, host: host) else { return }
+              let reachedAt = host(reachedFrom: reached.endpoint) else { return }
+        // A code that named the iPhone is saved on the name: over IPv6 a handshake can't tell them apart.
+        let named = codeGiven.flatMap { $0.address == ready.address && HostName.isName($0.host) && reachedAt.contains(":") ? $0.host : nil }
+        guard devices.claimReady(address: ready.address, host: named ?? reachedAt) else { return }
         log("WireGuard: a new device connected with the QR code")
         wireGuardPeersChanged()
     }
