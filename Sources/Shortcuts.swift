@@ -93,7 +93,7 @@ struct TetherStatusEntity: TransientAppEntity {
         sharing = state.sharing
         connectedDevices = state.connected
         vpn = state.vpn
-        hotspotName = name.map { "\($0).local" } ?? ""
+        hotspotName = name ?? ""
         problem = state.problem ?? ""
     }
 

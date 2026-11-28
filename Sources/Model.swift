@@ -565,6 +565,8 @@ final class Model: ObservableObject {
     }
 
     var deviceHost: String? { session.deviceHost }
+    /// See `HotspotSession.hotspotName`.
+    var hotspotName: String? { session.hotspotName }
     var pageHosts: [String] { session.pageHosts }
 
     /// See `HotspotSession.usage(of:)`.

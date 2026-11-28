@@ -905,6 +905,9 @@ final class HotspotSession {
     /// The iPhone's name, from the server's key. Nil until the keys are read.
     private var name: String? { devices.loaded ? HostName.name(for: devices.setup.serverPublicKey) : nil }
 
+    /// The name for Get Tether Status in Shortcuts, with .local.
+    var hotspotName: String? { name }
+
     /// The name, while mDNS answers it with the address Tether listens on now.
     private var publishedName: String? {
         guard let name, let listeningIPv6, hostName?.published == HostNameRecord(name: name, address: listeningIPv6) else { return nil }
